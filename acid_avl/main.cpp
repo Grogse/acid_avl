@@ -1,4 +1,6 @@
 ﻿#include <iostream>
+#include <map>
+#include <ctime>
 #include <vector>
 #include "AVLtree.hpp"
 
@@ -7,47 +9,40 @@ using namespace AVLtree;
 
 int main() {
 
-	int n = 40;
-	srand(2);
+	int n = 1000;
+	srand(time(0));
 	AVL<int, int> tree;
+	map<int, int> truetree;
+	AVLiterator<int, int> iter;
 
 	for (int i = 0; i < n; ++i) {
+		int key = rand() % n;
 		int value = rand();
-		tree.insert(pair<int, int>(i, value));
+		tree.insert(pair<int, int>(key, value));
+		truetree.insert(pair<int, int>(key, value));
 	}
 
-	std::vector<AVLiterator<int, int>> its;
+	//EXPECT_TRUE(tree.height() <= 1.44 * log2(n));
 
 	for (int i = 0; i < n; ++i) {
-		AVLiterator<int, int> iter = tree.begin();
-		int m = std::rand() % (n / 2);
+		int key = rand() % n;
+		int val;
 
-		for (int j = 1; j < m; ++j) {
-			iter++;
-			if (iter == tree.end()) break;
+		try {
+			val = truetree.at(key);
+		}
+		catch (const std::out_of_range& e) {
+			continue;
 		}
 
-		//cout << iter.get_key() << endl;
-		its.push_back(iter);
+		//EXPECT_TRUE(tree.at(key) == val);
 	}
 
-
-	for (int i = 0; i < n; ++i) {
-		int key = std::rand() % n;
-		tree.erase(key);
+	iter = tree.begin();
+	int key_ = iter.get_key();
+	while (++iter != tree.end()) {
+		if (key_ <= iter.get_key()) cout << "SUCK COCK ";
 	}
-
-	for (auto it : its) {
-		while (it != tree.end()) {
-			it++;
-		}
-	}
-
-	cout << &its;
-
-	/*for (int i = 0; i < its.size(); ++i) {
-		cout << its[i].get_count() << endl;
-	}*/
 
 	return 0;
 }

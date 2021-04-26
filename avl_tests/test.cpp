@@ -150,6 +150,4 @@ TEST(Iterator, RandomInvalidation) {
 			it++;
 		}
 	}
-
-	//cout << &its;
 }
