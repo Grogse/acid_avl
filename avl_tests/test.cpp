@@ -6,7 +6,7 @@ using namespace std;
 using namespace AVLtree;
 
 TEST(Modifiers, Insert) {
-	int n = 1000;
+	int n = 7000;
 	srand(time(0));
 	AVL<int, int> tree;
 	AVLiterator<int, int> iter;
@@ -22,7 +22,7 @@ TEST(Modifiers, Insert) {
 }
 
 TEST(Modifiers, RandomInsert) {
-	int n = 1000;
+	int n = 7000;
 	srand(time(0));
 	AVL<int, int> tree;
 	map<int, int> truetree;
@@ -57,7 +57,7 @@ TEST(Modifiers, RandomInsert) {
 }
 
 TEST(Modifiers, RandomErase) {
-	int n = 1000;
+	int n = 7000;
 	srand(time(0));
 	AVL<int, int> tree;
 	map<int, int> truetree;
@@ -117,7 +117,7 @@ TEST(Iterator, Invalidation) {
 }
 
 TEST(Iterator, RandomInvalidation) {
-	int n = 5000;
+	int n = 7000;
 	srand(time(0));
 	AVL<int, int> tree;
 

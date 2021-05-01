@@ -9,13 +9,11 @@ namespace AVLtree {
 	}
 
 	enum state_for_iterator {
-		FREE,
-		ELEMENT,
-		TREE,
-		REMOVED,
 		OCCUPIED,
-		BEGIN,
+		REMOVED,
 		LAST,
+		FREE,
+		ROOT,
 		END,
 	};
 
@@ -39,7 +37,7 @@ namespace AVLtree {
 
 		Node(const value_type &val) : Node() {
 			new (&this->data) value_type(std::move(val)); //placement new
-			this->state = ELEMENT;
+			this->state = OCCUPIED;
 			this->height = 1;
 		}
 
@@ -129,8 +127,9 @@ namespace AVLtree {
 						}
 						else {
 							node_type *temp = this->ptr->parent;
-							while (temp->state != ELEMENT) {
-								temp = temp->parent;
+							while (temp->state == REMOVED) {
+								if ((temp->right != nullptr) && (temp->right->data.first > temp->data.first)) temp = temp->right;
+								else temp = temp->parent;
 							}
 
 							this->ptr->ref_count -= 1;
@@ -216,7 +215,7 @@ namespace AVLtree {
 					}
 				}
 
-				if (this->ptr->state == BEGIN) return *this;
+				if (this->ptr == find_begin(this->ptr)) return *this;
 
 				if (this->ptr->state == END) {
 					this->ptr->ref_count += 1;
@@ -329,6 +328,15 @@ namespace AVLtree {
 			return tmp;
 		}
 
+		node_type* find_begin(node_type *node) {
+			if (node->state == ROOT) return find_min(node);
+			else {
+				node_type *tmp = node;
+				while (tmp->parent != nullptr) tmp = tmp->parent;
+				return find_min(node);
+			}
+		}
+
 		pointer ptr;
 		state_for_iterator state;
 	};
@@ -343,16 +351,11 @@ namespace AVLtree {
 		using value_type = std::pair<const key_type, data_type>;
 		using size_type = std::size_t;
 
-		AVL() : root(new node_type()), sentinel(), size_(0) {
-		}
+		AVL() : root(new node_type()), sentinel(), size_(0) {}
 
 		AVL(const value_type &value) : root(new node_type(value)), sentinel(), size_(1) {
-			this->root->parent = new node_type();
-			this->root->height = 1;
-			this->root->parent->state = TREE;
-			this->root->parent->left = this->root;
-			this->root->state = BEGIN;
-			this->ref_count += 2;
+			this->state = ROOT;
+			this->ref_count += 1;
 			this->sentinel.ptr = root;
 			this->sentinel.state = END;
 		}
@@ -374,11 +377,11 @@ namespace AVLtree {
 		}
 
 		iterator begin() {
-			iterator *iter = new iterator();
-			iter->ptr = find_min(this->root);
-			iter->state = OCCUPIED;
+			iterator iter;
+			iter.ptr = find_min(this->root);
+			iter.state = OCCUPIED;
 
-			return *iter;
+			return iter;
 		}
 
 		iterator end() {
@@ -389,7 +392,6 @@ namespace AVLtree {
 			node_type *tmp = find(key);
 
 			if (tmp != nullptr) return tmp->data.second;
-
 			throw std::out_of_range("key out of range");
 		}
 
@@ -407,7 +409,8 @@ namespace AVLtree {
 
 		~AVL() {
 			if (this->root != nullptr) {
-				delete this->root->parent;
+				delete this->root;
+				this->sentinel.ptr = nullptr;
 			}
 		}
 
@@ -455,62 +458,61 @@ namespace AVLtree {
 				if (key > tmp->data.first) tmp = tmp->right;
 			}
 
-			return tmp;
+			throw std::out_of_range("no such key");
 		}
 
-		void rewrite_count(node_type *node) {
+		void rewrite_count(node_type *node, bool flag) {
+			short k = -1;
+			if (flag) k = 1;
+
 			if (node != nullptr) {
-				if ((node->left != nullptr) && (node->right != nullptr)) node->ref_count -= 3;
+				if ((node->left != nullptr) && (node->right != nullptr)) node->ref_count += 3 * k;
 				else {
 					if (node->state == LAST) {
-						if ((node->left == nullptr) && (node->right == nullptr)) node->ref_count -= 2;
-						else node->ref_count -= 3;
+						if ((node->left == nullptr) && (node->right == nullptr)) node->ref_count += 2 * k;
+						else node->ref_count += 3 * k;
 					}
 					else {
-						if ((node->left == nullptr) && (node->right == nullptr)) node->ref_count -= 1;
-						else node->ref_count -= 2;
+						if ((node->left == nullptr) && (node->right == nullptr)) node->ref_count += 1 * k;
+						else node->ref_count += 2 * k;
 					}
 				}
 			}
 		}
 
-		void reset_count(node_type *node) {
-			if (node != nullptr) {
-				if ((node->left != nullptr) && (node->right != nullptr)) node->ref_count += 3;
-				else {
-					if (node->state == LAST) {
-						if ((node->left == nullptr) && (node->right == nullptr)) node->ref_count += 2;
-						else node->ref_count += 3;
-					}
-					else {
-						if ((node->left == nullptr) && (node->right == nullptr)) node->ref_count += 1;
-						else node->ref_count += 2;
-					}
-				}
+		void nodes_correction(node_type *x, node_type *y, node_type *z, bool flag) {
+			if (z != nullptr) z->parent = x;
+			else {
+				y->ref_count += 1;
+				x->ref_count -= 1;
 			}
+
+			y->parent = x->parent;
+			x->parent = y;
+
+			if (flag) {
+				x->left = z;
+				y->right = x;
+			}
+			else {
+				x->right = z;
+				y->left = x;
+			}
+
+			if (x->state == ROOT) {
+				x->state = OCCUPIED;
+				y->state = ROOT;
+			}
+
+			x->height = (1 + compare(node_height(x->left), node_height(x->right)));
+			y->height = (1 + compare(node_height(y->left), node_height(y->right)));
 		}
 
 		node_type* right_rotation(node_type *node) {
 			node_type *tmp_1 = node->left;
 			node_type *tmp_2 = tmp_1->right;
 
-			rewrite_count(node);
-			rewrite_count(tmp_1);
-			rewrite_count(tmp_2);
-
-			if (tmp_2 != nullptr) tmp_2->parent = node;
-			tmp_1->parent = node->parent;
-			node->parent = tmp_1;
-
-			node->left = tmp_2;
-			tmp_1->right = node;
-
-			reset_count(node);
-			reset_count(tmp_1);
-			reset_count(tmp_2);
-
-			node->height = (1 + compare(node_height(node->left), node_height(node->right)));
-			tmp_1->height = (1 + compare(node_height(tmp_1->left), node_height(tmp_1->right)));
+			nodes_correction(node, tmp_1, tmp_2, true);
 
 			return tmp_1;
 		}
@@ -519,23 +521,7 @@ namespace AVLtree {
 			node_type *tmp_1 = node->right;
 			node_type *tmp_2 = tmp_1->left;
 
-			rewrite_count(node);
-			rewrite_count(tmp_1);
-			rewrite_count(tmp_2);
-
-			if (tmp_2 != nullptr) tmp_2->parent = node;
-			tmp_1->parent = node->parent;
-			node->parent = tmp_1;
-
-			node->right = tmp_2;
-			tmp_1->left = node;
-
-			reset_count(node);
-			reset_count(tmp_1);
-			reset_count(tmp_2);
-
-			node->height = (1 + compare(node_height(node->left), node_height(node->right)));
-			tmp_1->height = (1 + compare(node_height(tmp_1->left), node_height(tmp_1->right)));
+			nodes_correction(node, tmp_1, tmp_2, false);
 
 			return tmp_1;
 		}
@@ -547,13 +533,9 @@ namespace AVLtree {
 				node->ref_count += 1;
 				p->ref_count += 1;
 
-				if ((value.first < p->data.first) && (p->state == BEGIN)) {
-					p->state = ELEMENT;
-					node->state = BEGIN;
-				}
+				if (((p->state == LAST) || (p->state == ROOT)) && (value.first > p->data.first)) {
+					if (p->state == LAST) p->state = OCCUPIED;
 
-				if (((p->state == LAST) || (p->parent->state == TREE)) && (value.first > p->data.first)) {
-					p->state = ELEMENT;
 					node->state = LAST;
 					p->ref_count -= 1;
 					node->ref_count += 1;
@@ -565,15 +547,11 @@ namespace AVLtree {
 				return node;
 			}
 
-			// ever rewrite this !!!
 			if (node->state == FREE) {
 				new (&node->data) value_type(std::move(value));
-				node->height = 1;
-				node->parent = new node_type();
-				node->parent->state = TREE;
-				node->parent->left = node;
-				node->state = BEGIN;
-				node->ref_count += 2;
+				node->state = ROOT;
+				node->ref_count += 1;
+
 				this->sentinel.ptr = node;
 				this->sentinel.state = END;
 				this->size_++;
@@ -604,8 +582,7 @@ namespace AVLtree {
 		}
 
 		void unlink(node_type *node, size_type count) {
-			if (node->parent->state == TREE) node->parent = nullptr;
-			else node->parent->ref_count += 1;
+			if (node->state != ROOT) node->parent->ref_count += 1;
 
 			if (node->left != nullptr) node->left->ref_count += 1;
 			if (node->right != nullptr) node->right->ref_count += 1;
@@ -627,12 +604,11 @@ namespace AVLtree {
 					if (tmp == nullptr) {
 						node->parent->ref_count -= 1;
 
-						if (node->state == BEGIN) node->parent->state = BEGIN;
-
 						if (node->state == LAST) {
 							node->parent->ref_count += 1;
 							node->parent->state = LAST;
 							node->ref_count -= 1;
+
 							this->sentinel.ptr = node->parent;
 						}
 
@@ -642,18 +618,22 @@ namespace AVLtree {
 						node = nullptr;
 					}
 					else {
-						if (node->state == BEGIN) node->parent->state = BEGIN;
-
 						if (node->state == LAST) {
 							tmp->state = LAST;
 							tmp->ref_count += 1;
 							node->ref_count -= 1;
+
 							this->sentinel.ptr = tmp;
 						}
 
 						tmp->parent = node->parent;
 
-						if (node->ref_count > 2) unlink(node, 2);
+						if (node->state == ROOT) {
+							if (node->ref_count > 1) unlink(node, 1);
+							tmp->state = ROOT;
+						}
+						else if (node->ref_count > 2) unlink(node, 2);
+
 
 						node = tmp;
 						tmp = nullptr;
@@ -665,6 +645,7 @@ namespace AVLtree {
 					node_type *tmp = find_min(node->right);
 					bool flag = false;
 
+					// relink parent
 					if (tmp->right != nullptr) {
 						if (tmp->parent->data.first > tmp->right->data.first) tmp->parent->left = tmp->right;
 						else tmp->parent->right = tmp->right;
@@ -682,30 +663,28 @@ namespace AVLtree {
 						tmp->parent->ref_count -= 1;
 					}
 
-					if (node->parent->state != TREE) {
-						if (tmp->data.first < node->parent->data.first) node->parent->left = tmp;
-						else node->parent->right = tmp;
-					}
-					else node->parent->left = tmp;
-
-
-					rewrite_count(tmp);
+					rewrite_count(tmp, false);
 					tmp->parent = node->parent;
 					tmp->left = node->left;
 					tmp->right = node->right;
 					if (node->right != nullptr) node->right->parent = tmp;
 					if (node->left != nullptr) node->left->parent = tmp;
 					tmp->height = node->height;
-					reset_count(tmp);
+					rewrite_count(tmp, true);
 
 					if (flag) {
 						if (node->data.first > tmp->data.first) node->left = tmp;
 						else node->right = tmp;
 					}
 
-					if (node->ref_count > 3) unlink(node, 3);
-					node = tmp;
+					if (node->state == ROOT) {
+						if (node->ref_count > 2) unlink(node, 2);
+						tmp->state = ROOT;
+					}
+					else if (node->ref_count > 3) unlink(node, 3);
 
+
+					node = tmp;
 					tmp = nullptr;
 				}
 			}
