@@ -8,40 +8,38 @@ using namespace std;
 using namespace AVLtree;
 
 int main() {
-
-	int n = 1000;
+	int n = 10000;
 	srand(time(0));
 	AVL<int, int> tree;
-	map<int, int> truetree;
-	AVLiterator<int, int> iter;
 
 	for (int i = 0; i < n; ++i) {
-		int key = rand() % n;
 		int value = rand();
-		tree.insert(pair<int, int>(key, value));
-		truetree.insert(pair<int, int>(key, value));
+		tree.insert(pair<int, int>(i, value));
 	}
 
-	//EXPECT_TRUE(tree.height() <= 1.44 * log2(n));
+	std::vector<AVLiterator<int, int>> its;
 
 	for (int i = 0; i < n; ++i) {
-		int key = rand() % n;
-		int val;
+		AVLiterator<int, int> iter = tree.begin();
+		int m = std::rand() % (n / 2);
 
-		try {
-			val = truetree.at(key);
-		}
-		catch (const std::out_of_range& e) {
-			continue;
+		for (int j = 1; j < m; ++j) {
+			iter++;
+			if (iter == tree.end()) break;
 		}
 
-		//EXPECT_TRUE(tree.at(key) == val);
+		its.push_back(iter);
 	}
 
-	iter = tree.begin();
-	int key_ = iter.get_key();
-	while (++iter != tree.end()) {
-		if (key_ <= iter.get_key()) cout << "SUCK COCK ";
+	for (int i = 0; i < n; ++i) {
+		int key = std::rand() % n;
+		tree.erase(key);
+	}
+
+	for (auto it : its) {
+		while (it != tree.end()) {
+			it++;
+		}
 	}
 
 	return 0;
