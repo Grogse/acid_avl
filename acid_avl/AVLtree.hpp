@@ -390,7 +390,7 @@ namespace AVLtree {
 					}
 				}
 
-				if (this->ptr->state == BEGIN) return *this;
+				if (this->ptr == find_begin(this->ptr)) return *this;
 
 				if (this->ptr->state == END) {
 					this->ptr = this->ptr->parent;
@@ -503,6 +503,15 @@ namespace AVLtree {
 			return tmp;
 		}
 
+		node_type* find_begin(node_type *node) {
+			if (node->state == ROOT) return find_min(node);
+			else {
+				node_type *tmp = node;
+				while (tmp->parent != nullptr) tmp = tmp->parent;
+				return find_min(node);
+			}
+		}
+
 		pointer ptr;
 		state_for_iterator state;
 	};
@@ -561,7 +570,6 @@ namespace AVLtree {
 			node_type *tmp = find(key);
 
 			if (tmp != nullptr) return tmp->data.second;
-
 			throw std::out_of_range("key out of range");
 		}
 
@@ -583,7 +591,8 @@ namespace AVLtree {
 
 		~AVL() {
 			if (this->root != nullptr) {
-				delete this->root->parent;
+				delete this->root;
+				this->sentinel.ptr = nullptr;
 			}
 		}
 
@@ -623,7 +632,7 @@ namespace AVLtree {
 				if (key > tmp->data.first) tmp = tmp->right;
 			}
 
-			return tmp;
+			throw std::out_of_range("no such key");
 		}
 
 		void rewrite_count(node_type *node, bool flag) {
@@ -805,7 +814,12 @@ namespace AVLtree {
 
 						tmp->parent = node->parent;
 
-						if (node->ref_count > 2) unlink(node, 2);
+						if (node->state == ROOT) {
+							if (node->ref_count > 1) unlink(node, 1);
+							tmp->state = ROOT;
+						}
+						else if (node->ref_count > 2) unlink(node, 2);
+
 
 						node = tmp;
 						tmp = nullptr;
@@ -817,6 +831,7 @@ namespace AVLtree {
 					node_type *tmp = find_min(node->right);
 					bool flag = false;
 
+					// relink parent
 					if (tmp->right != nullptr) {
 						if (tmp->parent->data.first > tmp->right->data.first) tmp->parent->left = tmp->right;
 						else tmp->parent->right = tmp->right;
@@ -855,9 +870,14 @@ namespace AVLtree {
 						else node->right = tmp;
 					}
 
-					if (node->ref_count > 3) unlink(node, 3);
-					node = tmp;
+					if (node->state == ROOT) {
+						if (node->ref_count > 2) unlink(node, 2);
+						tmp->state = ROOT;
+					}
+					else if (node->ref_count > 3) unlink(node, 3);
 
+
+					node = tmp;
 					tmp = nullptr;
 				}
 			}
