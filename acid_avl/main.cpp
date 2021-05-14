@@ -1,4 +1,5 @@
-﻿#include <iostream>
+﻿#define _CRTDBG_MAP_ALLOC  
+#include <iostream>
 #include <map>
 #include <ctime>
 #include <vector>
@@ -8,39 +9,42 @@ using namespace std;
 using namespace AVLtree;
 
 int main() {
-	int n = 10000;
-	srand(time(0));
-	AVL<int, int> tree;
+	{
+		int n = 10000;
+		srand(time(0));
+		AVL<int, int> tree;
 
-	for (int i = 0; i < n; ++i) {
-		int value = rand();
-		tree.insert(pair<int, int>(i, value));
-	}
-
-	std::vector<AVLiterator<int, int>> its;
-
-	for (int i = 0; i < n; ++i) {
-		AVLiterator<int, int> iter = tree.begin();
-		int m = std::rand() % (n / 2);
-
-		for (int j = 1; j < m; ++j) {
-			iter++;
-			if (iter == tree.end()) break;
+		for (int i = 0; i < n; ++i) {
+			int value = rand();
+			tree.insert(pair<int, int>(i, value));
 		}
 
-		its.push_back(iter);
-	}
+		std::vector<AVLiterator<int, int>> its;
 
-	for (int i = 0; i < n; ++i) {
-		int key = std::rand() % n;
-		tree.erase(key);
-	}
+		for (int i = 0; i < n; ++i) {
+			AVLiterator<int, int> iter = tree.begin();
+			int m = std::rand() % (n / 2);
 
-	for (auto it : its) {
-		while (it != tree.end()) {
-			it++;
+			for (int j = 1; j < m; ++j) {
+				iter++;
+				if (iter == tree.end()) break;
+			}
+
+			its.push_back(iter);
 		}
-	}
 
+		for (int i = 0; i < n; ++i) {
+			int key = std::rand() % n;
+			tree.erase(key);
+		}
+
+		for (auto it : its) {
+			while (it != tree.end()) {
+				it++;
+			}
+		}
+		
+	}
+	_CrtDumpMemoryLeaks();
 	return 0;
 }

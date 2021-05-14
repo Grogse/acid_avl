@@ -45,6 +45,7 @@ TEST(Modifiers, RandomInsert) {
 			val = truetree.at(key);
 		}
 		catch (const std::out_of_range& e) {
+			//EXPECT_THROW(tree.at(key), std::out_of_range);
 			continue;
 		}
 
@@ -72,7 +73,7 @@ TEST(Modifiers, RandomErase) {
 	EXPECT_TRUE(tree.height() <= 1.44 * log2(n));
 
 	for (int i = 0; i < n; ++i) {
-		auto key = std::rand() % 5000;
+		auto key = std::rand() % n / 2;
 		tree.erase(key);
 		truetree.erase(key);
 	}
