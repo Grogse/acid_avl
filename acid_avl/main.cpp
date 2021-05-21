@@ -8,39 +8,24 @@ using namespace std;
 using namespace AVLtree;
 
 int main() {
-	int n = 6000;
+	int n = 10000, threads_count = 8;
 	srand(time(0));
 	AVL<int, int> tree;
+	AVLiterator<int, int> iter;
 
-	for (int i = 0; i < n; ++i) {
+	for (int j = 0; j < n; ++j) {
+		int key = rand() % n;
 		int value = rand();
-		tree.insert(pair<int, int>(i, value));
+		tree.insert(pair<int, int>(key, value));
 	}
 
-	std::vector<AVLiterator<int, int>> its;
-
-	for (int i = 0; i < n; ++i) {
-		AVLiterator<int, int> iter = tree.begin();
-		int m = std::rand() % (n / 2);
-
-		for (int j = 1; j < m; ++j) {
-			iter++;
-			if (iter == tree.end()) break;
-		}
-
-		its.push_back(iter);
+	iter = tree.end();
+	iter--;
+	int key_ = iter.get_key();
+	
+	while (--iter != tree.begin()) {
+		if (!(key_ >= iter.get_key())) cout << "SUCK COCK\n";
 	}
-
-	for (int i = 0; i < n; ++i) {
-		int key = std::rand() % n;
-		tree.erase(key);
-	}
-
-	for (auto it : its) {
-		while (it != tree.end()) {
-			it++;
-		}
-	}
-
+	
 	return 0;
 }
