@@ -1,5 +1,4 @@
-﻿#define _CRTDBG_MAP_ALLOC  
-#include <iostream>
+﻿#include <iostream>
 #include <map>
 #include <ctime>
 #include <vector>

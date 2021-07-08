@@ -52,7 +52,7 @@ TEST(Modifiers, RandomInsert) {
 	for (int i = 0; i < threads_count; ++i) threads[i].join();
 }
 
-TEST(Modifiers, RandomErase) {
+/*TEST(Modifiers, RandomErase) {
 	int n = 10000, threads_count = 8;
 	AVL<int, int> tree;
 	AVLiterator<int, int> iter_1, iter_2;
@@ -108,7 +108,7 @@ TEST(Modifiers, RandomErase) {
 	}
 
 	for (int i = 0; i < threads_count; ++i) threads[i].join();
-}
+}*/
 
 TEST(Modifiers, ConditionVariable) {
 	int n = 10000, threads_count = 8;
@@ -202,7 +202,7 @@ TEST(Iterator, Invalidation) {
 	EXPECT_TRUE(iter.get_value() == 6);
 }
 
-TEST(Iterator, RandomInvalidation) {
+/*TEST(Iterator, RandomInvalidation) {
 	int n = 10000, threads_count = 8;
 	AVL<int, int> tree;
 	std::vector<std::thread> threads;
@@ -265,9 +265,9 @@ TEST(Iterator, RandomInvalidation) {
 			it++;
 		}
 	}
-}
+}*/
 
-TEST(Iterator, InsertEraseInvalidation) {
+/*TEST(Iterator, InsertEraseInvalidation) {
 	int n = 10000, threads_count = 8;
 	AVL<int, int> tree;
 	AVLiterator<int, int> iter;
@@ -305,4 +305,4 @@ TEST(Iterator, InsertEraseInvalidation) {
 	}
 
 	for (int i = 0; i < threads_count; ++i) threads[i].join();
-}
+}*/

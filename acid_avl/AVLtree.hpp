@@ -275,7 +275,7 @@ namespace AVLtree {
 
         AVLiterator() noexcept : ptr(), end_(), state(FREE) {}
 
-        AVLiterator(const pointer &smart_ptr, const pointer &end, std::shared_mutex *m) noexcept : ptr(smart_ptr), 
+        AVLiterator(const pointer &smart_ptr, const pointer &end, std::shared_mutex *m) noexcept : ptr(smart_ptr),
             end_(end), state(states::VALID), mutex(m) {}
 
         ~AVLiterator() {}
