@@ -28,7 +28,7 @@ TEST(Multithreading, PushErase) {
 	for (int i = 0; i < threadsnum; ++i) {
 		threads.push_back(std::thread([&](int th) {
 			for (int j = 0; j < deln; ++j) {
-				auto it = list.find(j + th * deln);
+				auto it = list.find(th * deln + j);
 				list.erase(it);
 			}
 			}, i));
@@ -49,8 +49,9 @@ TEST(Multithreading, MediumGrained) {
 
 	for (int i = 0; i < threadsnum; ++i) {
 		threads.push_back(std::thread([&](int th) {
-			for (int j = 0; j < n * 2; ++j) list.push_back(j + th * n);
+			for (int j = 0; j < n; ++j) list.push_back(j + th * n);
 			}, i));
+
 		threads.push_back(std::thread([&](int th) {
 			for (int j = 0; j < n; ++j) list.push_front(j + (th + threadsnum) * n);
 			}, i));
@@ -190,7 +191,7 @@ TEST(Multithreading, TimeIteration) {
 			}, i));
 	}
 
-	std::this_thread::sleep_for(std::chrono::milliseconds(200));
+	std::this_thread::sleep_for(std::chrono::milliseconds(500));
 	cv.notify_all();
 
 	for (int k = 0; k < threadsnum; ++k) threads[k].join();
