@@ -142,7 +142,15 @@
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="gnuplot.h" />
     <ClInclude Include="List.hpp" />
+    <ClInclude Include="List_fine_graining.hpp" />
+    <ClInclude Include="List_medium_graining.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="fine_graining.txt" />
+    <Text Include="medium_graining.txt" />
+    <Text Include="spinlock.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

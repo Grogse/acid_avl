@@ -5,7 +5,7 @@
 #include <atomic>
 #include <shared_mutex>
 
-namespace ACIDList {
+namespace ACIDListFine {
 
 	enum states {
 		REMOVED,
@@ -14,113 +14,53 @@ namespace ACIDList {
 		END,
 	};
 
-	class RWLock {
-	 protected:
-		 template <typename DATA>
-		 friend class List;
-
-		 template <typename DATA>
-		 friend class Node;
-
-		 template <typename DATA>
-		 friend class FreeNode;
-
-		 template <typename DATA>
-		 friend class Iterator;
-
-		 template <typename DATA>
-		 friend class FreeList;
-
-		RWLock() : val(0), bit(1 << 31) {}
-
-		void rlock() {
-			while (true) {
-				uint32_t old = this->val;
-				
-				if (!(old & this->bit) && this->val.compare_exchange_strong(old, old + 1)) return;
-				std::this_thread::yield();
-			}
-		}
-
-		void wlock() {
-			while (true) {
-				uint32_t old = this->val;
-				
-				if (!(old & this->bit) &&
-					this->val.compare_exchange_strong(old, old | this->bit)) {
-					break;
-				}
-				std::this_thread::yield();
-			}
-			
-			while (true) {
-				if (this->val == this->bit) break;
-				std::this_thread::yield();
-			}
-		}
-
-		void unlock() {
-			if (this->val == this->bit) val = 0;
-			else this->val--;
-		}
-
-		std::atomic<uint32_t> val;
-		uint32_t bit;
-	};
-
 	template <typename DATA>
 	class Node {
-	 protected:
+	protected:
 		template <typename DATA>
 		friend class Iterator;
 
 		template <typename DATA>
-		friend class List;
+		friend class List_fine;
 
 		template <typename DATA>
 		friend class FreeList;
 
-		friend class RWLock;
-
 		using data_type = DATA;
 		using state_for_node = states;
 		using size_type = std::size_t;
-		using cur_list = List<DATA>;
-		using rw_lock = RWLock;
+		using cur_list = List_fine<DATA>;
 
 		Node(states state, cur_list *clist) : list(clist), data(), prev(nullptr), next(nullptr), state(state), ref_count(0) {}
 
-		Node(data_type value, cur_list *clist) :list(clist), data(value), prev(nullptr), next(nullptr), state(states::VALID), 
+		Node(data_type value, cur_list *clist) :list(clist), data(value), prev(nullptr), next(nullptr), state(states::VALID),
 			ref_count(0) {}
 
 		void destroy() {
-			this->list->freelock.rlock();
+			std::shared_lock<std::shared_mutex> guard(this->list->freemutex);
 			size_type ref = this->ref_count--;
 			if (ref == 0) this->list->myfreelist->push(this);
-			this->list->freelock.unlock();
 		}
-		
+
 		cur_list *list;
 		data_type data;
-		
+
 		Node *prev;
 		Node *next;
-		
+
 		std::atomic<states> state;
 		std::atomic<bool> already;
 		std::atomic<size_type> ref_count;
-		rw_lock lock;
+		std::shared_mutex mutex;
 	};
 
 	template <typename DATA>
 	class FreeNode {
-	 protected:
+	protected:
 		using node = Node<DATA>;
 
 		template<typename DATA>
 		friend class FreeList;
-
-		friend class RWLock;
 
 		FreeNode(node* tmp) : ptr(tmp), next(nullptr) {}
 
@@ -130,13 +70,13 @@ namespace ACIDList {
 
 	template <typename DATA>
 	class FreeList {
-	 protected:
-		using list = List<DATA>;
+	protected:
+		using list = List_fine<DATA>;
 		using fnode = FreeNode<DATA>;
 		using lnode = Node<DATA>;
 
 		template<typename DATA>
-		friend class List;
+		friend class List_fine;
 
 		template<typename DATA>
 		friend class Node;
@@ -176,9 +116,9 @@ namespace ACIDList {
 
 		void clear_list() {
 			while (!this->clear || this->main.load()) {
-				this->mylist->freelock.wlock();
+				std::unique_lock<std::shared_mutex> guard(this->mylist->freemutex);
 				fnode* tmp = this->main;
-				this->mylist->freelock.unlock();
+				guard.unlock();
 
 				if (tmp) {
 					fnode* prev = tmp;
@@ -195,12 +135,12 @@ namespace ACIDList {
 						}
 					}
 
-					this->mylist->freelock.wlock();
+					guard.lock();
 					fnode* temp = this->main;
 
 					if (tmp == temp) this->main = nullptr;
 
-					this->mylist->freelock.unlock();
+					guard.unlock();
 
 					prev = temp;
 					for (fnode* next_node = temp; next_node != tmp;) {
@@ -240,17 +180,16 @@ namespace ACIDList {
 		using reference = data_type&;
 		using pointer = data_type*;
 		using node = Node<DATA>;
-		using list = List<DATA>;
+		using list = List_fine<DATA>;
 
 		template <typename DATA>
-		friend class List;
+		friend class List_fine;
 
 		template <typename DATA>
 		friend class FreeList;
 
-		friend class RWLock;
-
 		Iterator(const Iterator &other) noexcept {
+			std::unique_lock<std::shared_mutex> guard(other.ptr->mutex);
 			this->ptr = other.ptr;
 			this->ptr->ref_count++;
 			this->mylist = other.mylist;
@@ -267,60 +206,47 @@ namespace ACIDList {
 		}
 
 		reference operator*() const {
-			this->ptr->lock.rlock();
+			std::shared_lock<std::shared_mutex> guard(this->ptr->mutex);
 			return this->ptr->data;
-			this->ptr->lock.unlock();
 		}
 
 		Iterator& operator=(const Iterator &other) {
-			this->ptr->lock.wlock();
-			
-			if (this->ptr == other.ptr) {
-				this->ptr->lock.unlock();
-				return *this;
-			}
-			
-			other.ptr->lock.wlock();
+			std::unique_lock<std::shared_mutex> guard(this->ptr->mutex);
+			if (this->ptr == other.ptr) return *this;
+			std::unique_lock<std::shared_mutex> guard_o(other.ptr->mutex);
 
 			node *tmp = this->ptr;
 			this->ptr = other.ptr;
 			this->ptr->ref_count++;
 			this->mylist = other.mylist;
 
-			tmp->lock.unlock();
-			this->ptr->lock.unlock();
+			guard_o.unlock();
+			guard.unlock();
 
 			tmp->destroy();
 			return *this;
 		}
 
 		Iterator& operator=(Iterator &&other) {
-			this->ptr->lock.wlock();
-			if (this->ptr == other.ptr) {
-				this->ptr->lock.unlock();
-				return *this;
-			}
-
-			other.ptr->lock.wlock();
+			std::unique_lock<std::shared_mutex> guard(this->ptr->mutex);
+			if (this->ptr == other.ptr) return *this;
+			std::unique_lock<std::shared_mutex> guard_o(other.ptr->mutex);
 
 			node *tmp = this->ptr;
-			this->ptr= other.ptr;
+			this->ptr = other.ptr;
 			this->ptr->ref_count++;
 			this->mylist = other.mylist;
 
-			tmp->lock.unlock();
-			this->ptr->lock.unlock();
+			guard_o.unlock();
+			guard.unlock();
 
 			tmp->destroy();
 			return *this;
 		}
 
 		data_type get() {
-			this->ptr->lock.rlock();
-			data_type tmp = this->ptr->data;
-			this->ptr->lock.unlock();
-			
-			return tmp;
+			std::shared_lock<std::shared_mutex> guard(this->ptr->mutex);
+			return this->ptr->data;
 		}
 
 		node* get_pointer() {
@@ -328,9 +254,8 @@ namespace ACIDList {
 		}
 
 		void set(data_type value) {
-			this->ptr->lock.wlock();
+			std::unique_lock<std::shared_mutex> guard(this->ptr->mutex);
 			this->ptr->data = value;
-			this->ptr->lock.unlock();
 		}
 
 		Iterator& operator++() {
@@ -360,20 +285,20 @@ namespace ACIDList {
 		}
 
 		bool operator!=(const Iterator& other) {
-			return other.ptr!= this->ptr;
+			return other.ptr != this->ptr;
 		}
 
 	private:
 		void plus() {
 			if (this->ptr && this->ptr->state != states::END) {
 				node* tmp;
-				this->mylist->freelock.rlock();
+				std::shared_lock<std::shared_mutex> guard(this->mylist->freemutex);
 
 				tmp = this->ptr;
-				this->ptr= this->ptr->next;
+				this->ptr = this->ptr->next;
 				this->ptr->ref_count++;
-				
-				this->mylist->freelock.unlock();
+
+				guard.unlock();
 				tmp->destroy();
 			}
 		}
@@ -381,13 +306,13 @@ namespace ACIDList {
 		void minus() {
 			if (this->ptr && this->ptr->state != states::BEGIN) {
 				node* tmp;
-				this->mylist->freelock.rlock();
+				std::shared_lock<std::shared_mutex> guard(this->mylist->freemutex);
 
 				tmp = this->ptr;
 				this->ptr = this->ptr->prev;
 				this->ptr->ref_count++;
 
-				this->mylist->freelock.unlock();
+				guard.unlock();
 				tmp->destroy();
 			}
 		}
@@ -397,8 +322,8 @@ namespace ACIDList {
 	};
 
 	template <typename DATA>
-	class List {
-	 public:
+	class List_fine {
+	public:
 		using size_type = std::size_t;
 		using list_type = DATA;
 		using data_type = Node<list_type>;
@@ -406,7 +331,6 @@ namespace ACIDList {
 		using const_reference = const list_type&;
 		using iterator = Iterator<list_type>;
 		using freelist = FreeList<DATA>;
-		using rw_lock = RWLock;
 
 		template <typename DATA>
 		friend class FreeList;
@@ -417,16 +341,14 @@ namespace ACIDList {
 		template <typename DATA>
 		friend class Iterator;
 
-		friend class RWLock;
-
-		List(std::initializer_list<list_type> list) : List() {
+		List_fine(std::initializer_list<list_type> list) : List_fine() {
 			for (auto it : list) push_back(it);
 		}
 
-		List() {
+		List_fine() {
 			this->last = new data_type(states::END, this);
 			this->root = new data_type(states::BEGIN, this);
-			this->myfreelist= new freelist(this);
+			this->myfreelist = new freelist(this);
 
 			this->last->ref_count++;
 			this->root->ref_count++;
@@ -435,16 +357,16 @@ namespace ACIDList {
 			this->root->next = this->last;
 		}
 
-		~List() {
+		~List_fine() {
 			delete this->myfreelist;
 			data_type* tmp = this->root;
-			
+
 			while (tmp != this->last) {
 				data_type* prev = tmp;
 				tmp = tmp->next;
 				delete prev;
 			}
-			
+
 			delete tmp;
 		}
 
@@ -453,23 +375,19 @@ namespace ACIDList {
 		}
 
 		iterator begin() {
-			this->root->lock.rlock();
-			iterator b(this->root->next, this);
-			this->root->lock.unlock();
-			return b;
+			std::shared_lock<std::shared_mutex> guard(this->root->mutex);
+			return iterator(this->root->next, this);
 		}
 
 		iterator end() {
-			this->last->lock.rlock();
-			iterator e(this->last, this);
-			this->last->lock.unlock();
-			return e;
+			std::shared_lock<std::shared_mutex> guard(this->last->mutex);
+			return iterator(this->last, this);
 		}
 
 		void push_front(list_type value) {
-			this->root->lock.wlock();
+			std::unique_lock<std::shared_mutex> guard_w(this->root->mutex);
 			data_type* tmp = this->root->next;
-			tmp->lock.wlock();
+			std::unique_lock<std::shared_mutex> guard_r(tmp->mutex);
 
 			data_type* new_node = new data_type(value, this);
 			new_node->prev = this->root;
@@ -481,25 +399,22 @@ namespace ACIDList {
 			tmp->prev = new_node;
 			this->root->next = new_node;
 			size_++;
-
-			this->root->lock.unlock();
-			tmp->lock.unlock();
 		}
 
 		void push_back(list_type value) {
 			data_type* left;
 			for (bool retry = true; retry;) {
-				this->last->lock.wlock();
+				std::unique_lock<std::shared_mutex> guard(this->last->mutex);
 				left = this->last->prev;
 				left->ref_count++;
-				this->last->lock.unlock();
+				guard.unlock();
 
-				left->lock.wlock();
-				this->last->lock.wlock();
+				std::unique_lock<std::shared_mutex> guard_l(left->mutex);
+				std::unique_lock<std::shared_mutex> guard_b(this->last->mutex);
 
 				if (left->next == this->last && this->last->prev == left) {
 					data_type* new_node = new data_type(value, this);
-						
+
 					new_node->prev = left;
 					new_node->next = this->last;
 					new_node->ref_count++;
@@ -512,31 +427,27 @@ namespace ACIDList {
 
 					retry = false;
 				}
-				
-				left->lock.unlock();
-				this->last->lock.unlock();
+
+				guard_b.unlock();
+				guard_l.unlock();
 				left->destroy();
 			}
 		}
 
 		void insert(iterator &it, list_type value) {
 			data_type* left = it.ptr;
-			
+
 			if (left->state == states::END) push_back(value);
 			else if (left->state == states::BEGIN) push_front(value);
 			else {
-				left->lock.wlock();
-				
-				if (left->state == states::REMOVED) {
-					left->lock.unlock();
-					return;
-				}
+				std::unique_lock<std::shared_mutex> guard_l(left->mutex);
+				if (left->state == states::REMOVED) return;
 
 				data_type* right = left->next;
-				right->lock.wlock();
+				std::unique_lock<std::shared_mutex> guard_r(right->mutex);
 
 				data_type* new_node = new data_type(value, this);
-				
+
 				new_node->ref_count++;
 				new_node->ref_count++;
 				new_node->prev = left;
@@ -546,25 +457,19 @@ namespace ACIDList {
 				right->prev = new_node;
 
 				this->size_++;
-
-				left->lock.unlock();
-				right->lock.unlock();
 			}
 		}
 
 		iterator find(list_type value) {
-			this->root->lock.rlock();
 			data_type* tmp = this->root;
+			std::shared_lock<std::shared_mutex> guard(tmp->mutex);
 			tmp = tmp->next;
-			this->root->lock.unlock();
-			
+
 			while (tmp != this->last && tmp->data != value) {
-				tmp->lock.rlock();
-				data_type* right = tmp->next;
-				tmp->lock.unlock();
-				tmp = right;
+				guard = std::shared_lock<std::shared_mutex>(tmp->mutex);
+				tmp = tmp->next;
 			}
-			
+
 			return iterator(tmp, this);
 		}
 
@@ -574,26 +479,23 @@ namespace ACIDList {
 			if (this->size_ == 0 || node->state != states::VALID) return;
 
 			for (bool retry = true; retry;) {
-				
-				node->lock.rlock();
-				if (node->state == states::REMOVED) {
-					node->lock.unlock();
-					return;
-				}
+
+				std::shared_lock<std::shared_mutex> guard(node->mutex);
+				if (node->state == states::REMOVED) return;
 
 				data_type *left = node->prev;
 				data_type *right = node->next;
 				left->ref_count++;
 				right->ref_count++;
-				node->lock.unlock();
+				guard.unlock();
 
-				left->lock.wlock();
-				node->lock.rlock();
-				right->lock.wlock();
+				std::unique_lock<std::shared_mutex> guard_l(left->mutex);
+				std::shared_lock<std::shared_mutex> guard_c(node->mutex);
+				std::unique_lock<std::shared_mutex> guard_r(right->mutex);
 
 				if (left->next == node && right->prev == node) {
 					node->state = states::REMOVED;
-						
+
 					node->ref_count--;
 					node->ref_count--;
 
@@ -605,11 +507,11 @@ namespace ACIDList {
 					this->size_--;
 					retry = false;
 				}
-				
-				left->lock.unlock();
-				node->lock.unlock();
-				right->lock.unlock();
-				
+
+
+				guard_r.unlock();
+				guard_c.unlock();
+				guard_l.unlock();
 				left->destroy();
 				right->destroy();
 			}
@@ -617,18 +519,19 @@ namespace ACIDList {
 
 		void pop_back() {
 			if (this->size_ != 0) {
-				this->last->lock.wlock();
+				std::unique_lock<std::shared_mutex> guard(this->last->mutex);
+
 				iterator it = iterator(this->last->prev);
-				this->last->lock.unlock();
+				guard.unlock();
 				erase(it);
 			}
 		}
 
-	 private:
+	private:
 		data_type* root;
 		data_type* last;
 		std::atomic<size_type> size_;
 		freelist *myfreelist;
-		rw_lock freelock;
+		std::shared_mutex freemutex;
 	};
 }

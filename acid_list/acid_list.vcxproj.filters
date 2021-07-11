@@ -23,5 +23,19 @@
     <ClInclude Include="List.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="gnuplot.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="List_medium_graining.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="List_fine_graining.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="spinlock.txt" />
+    <Text Include="fine_graining.txt" />
+    <Text Include="medium_graining.txt" />
   </ItemGroup>
 </Project>

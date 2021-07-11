@@ -1,5 +1,7 @@
 #include "pch.h"
 #include "../acid_list/List.hpp"
+//#include "../acid_list/List_fine_graining.hpp"
+//#include "../acid_list/List_medium_graining.hpp"
 
 #include <iostream>
 #include <future>
@@ -114,7 +116,7 @@ TEST(Multithreading, Insert) {
 }
 
 TEST(Multithreading, TimeTest) {
-	for (int threadsnum = 1; threadsnum <= 4; threadsnum *= 2) {
+	for (int threadsnum = 1; threadsnum <= 8; threadsnum *= 2) {
 		std::vector<std::thread> threads;
 		List<int> list;
 		int count = 0, n = 5000000, deln = n / 2;
@@ -157,7 +159,6 @@ TEST(Multithreading, TimeIteration) {
 	std::condition_variable cv;
 	std::vector<std::thread> threads;
 	int count = 0, threadsnum = 8, n = 500000, deln = n / 2;
-	auto startThreaded = std::chrono::high_resolution_clock::now();
 
 	for (int i = 0; i < threadsnum; ++i) {
 		threads.push_back(std::thread([&](int th) {
@@ -197,4 +198,49 @@ TEST(Multithreading, TimeIteration) {
 	for (int k = 0; k < threadsnum; ++k) threads[k].join();
 
 	EXPECT_TRUE(list.size() >= static_cast<size_t>(n - deln));
+}
+
+TEST(Multithreading, SpeedTest) {
+	for (int n = 50000; n <= 5000000; n *= 10) {
+		for (int threadsnum = 1; threadsnum <= 8; threadsnum *= 2) {
+			List<int> list;
+			int iternum = (n / 2) / threadsnum;;
+			std::vector<std::thread> threads;
+
+			for (int i = 0; i < threadsnum; ++i) {
+				threads.push_back(std::thread([&](int th) {
+					for (int j = 0; j < n / threadsnum; ++j) list.push_back(j + th * n / threadsnum);
+					}, i));
+			}
+
+			for (int k = 0; k < threadsnum; ++k) threads[k].join();
+			EXPECT_TRUE(list.size() == n);
+			std::condition_variable cv;
+
+			threads.clear();
+			auto startThread = std::chrono::high_resolution_clock::now();
+
+			for (int i = 0; i < threadsnum; ++i) {
+				threads.push_back(std::thread([&](int th) {
+					auto it = list.begin();
+					for (int j = 0; j < iternum; ++j) ++it;
+					std::mutex mutex_;
+					std::unique_lock<std::mutex> lck(mutex_);
+					cv.wait(lck);
+					for (int j = 0; j < iternum; ++j) {
+						list.erase(it);
+						++it;
+					}
+					}, i));
+			}
+
+			std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+			cv.notify_all();
+
+			for (int k = 0; k < threadsnum; ++k) threads[k].join();
+
+			auto endThread = std::chrono::high_resolution_clock::now();
+			auto timeThread = std::chrono::duration_cast<std::chrono::milliseconds>(endThread - startThread);
+		}
+	}
 }
